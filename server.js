@@ -20,41 +20,55 @@ let globalRoom = {
 io.on('connection', (socket) => {
     console.log('Bir oyunçu qoşuldu:', socket.id);
 
-    socket.on('join_game', ({ username, balance, pin }) => {
+    socket.on('join_game', ({ username, pin }) => {
         if (pin !== '666') {
             socket.emit('error_msg', 'Yanlış şifrə! Şifrə 666 olmalıdır.');
             return;
         }
 
-        let initBalance = parseFloat(balance) || 0;
-        if (initBalance < 0.50) {
-            socket.emit('error_msg', 'Oyuna qoşulmaq və kart almaq üçün balansınızda ən azı 0.50 AZN olmalıdır!');
+        // Maksimum 6 nəfər limiti yoxlanışı
+        let currentPlayersCount = Object.keys(globalRoom.players).length;
+        if (currentPlayersCount >= 6 && !globalRoom.players[socket.id]) {
+            socket.emit('error_msg', 'Otaq doludur! Maksimum 6 nəfər qoşula bilər.');
             return;
         }
 
-        globalRoom.players[socket.id] = {
-            username: username,
-            balance: initBalance,
-            card: generateCard(),
-            markedNumbers: []
-        };
+        if (!globalRoom.players[socket.id]) {
+            globalRoom.players[socket.id] = {
+                username: username,
+                balance: 0.00, // Sıfır balans
+                cards: [], // Birdən çox kart ala bilmə dəstəyi
+                markedNumbers: []
+            };
+        }
 
         socket.emit('joined_success');
         io.emit('update_players', globalRoom.players);
-        socket.emit('my_card', globalRoom.players[socket.id].card);
         socket.emit('balance_update', globalRoom.players[socket.id].balance);
         socket.emit('update_pot', globalRoom.pot);
     });
 
-    socket.on('update_balance_backend', ({ newBalance }) => {
+    // Depozit çeki təsdiqi (Admin və ya simulyasiya edilmiş təsdiq)
+    socket.on('submit_deposit', ({ amount }) => {
         let player = globalRoom.players[socket.id];
         if (player) {
-            player.balance = parseFloat(newBalance);
-            io.emit('update_players', globalRoom.players);
-            socket.emit('balance_update', player.balance);
+            let depAmount = parseFloat(amount) || 0;
+            if (depAmount > 0) {
+                // Çek göndərildi, təsdiq gözlənilir mesajı
+                socket.emit('info_msg', 'Çekiniz qəbul olundu. Yoxlanılır...');
+                
+                // Real sistemdə admin təsdiq edir, burada avtomatik yoxlama simulyasiyası:
+                setTimeout(() => {
+                    player.balance += depAmount;
+                    io.emit('update_players', globalRoom.players);
+                    socket.emit('balance_update', player.balance);
+                    socket.emit('info_msg', `${depAmount.toFixed(2)} AZN balansınıza əlavə olundu!`);
+                }, 2000);
+            }
         }
     });
 
+    // 0.50 AZN-ə kart almaq (Bir oyunçu istədiyi qədər kart ala bilər)
     socket.on('buy_card', () => {
         let player = globalRoom.players[socket.id];
         
@@ -62,29 +76,25 @@ io.on('connection', (socket) => {
             if (player.balance >= 0.50) {
                 player.balance -= 0.50;
                 globalRoom.pot += 0.50;
-                player.card = generateCard(); 
-                player.markedNumbers = [];
                 
-                socket.emit('my_card', player.card);
+                let newCard = generateCard();
+                player.cards.push(newCard);
+                
+                socket.emit('my_cards', player.cards);
                 socket.emit('balance_update', player.balance);
                 io.emit('update_pot', globalRoom.pot);
                 io.emit('update_players', globalRoom.players);
             } else {
-                socket.emit('error_msg', 'Balansınız 0.50 AZN-dən azdır! Depozit edin.');
+                socket.emit('error_msg', 'Balansınız kifayət etmir! Zəhmət olmasa depozit edin.');
             }
         }
     });
 
     socket.on('start_game', () => {
         if (!globalRoom.gameStarted) {
-            let totalPot = 0;
-            for (let id in globalRoom.players) {
-                if (globalRoom.players[id].balance >= 0.50) {
-                    globalRoom.players[id].balance -= 0.50;
-                    totalPot += 0.50;
-                }
-            }
-            globalRoom.pot = totalPot;
+            let activePlayers = Object.values(globalRoom.players);
+            if (activePlayers.length === 0) return;
+
             globalRoom.gameStarted = true;
             globalRoom.numbersCalled = [];
 
@@ -94,6 +104,7 @@ io.on('connection', (socket) => {
             globalRoom.interval = setInterval(() => {
                 if (globalRoom.numbersCalled.length >= 90) {
                     clearInterval(globalRoom.interval);
+                    globalRoom.gameStarted = false;
                     return;
                 }
 
@@ -109,14 +120,20 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('mark_number', ({ number }) => {
+    socket.on('mark_number', ({ cardIndex, number }) => {
         let player = globalRoom.players[socket.id];
 
-        if (globalRoom.gameStarted && player) {
-            if (globalRoom.numbersCalled.includes(number) && !player.markedNumbers.includes(number)) {
-                player.markedNumbers.push(number);
+        if (globalRoom.gameStarted && player && player.cards[cardIndex]) {
+            if (globalRoom.numbersCalled.includes(number)) {
+                if (!player.markedNumbers.includes(number)) {
+                    player.markedNumbers.push(number);
+                }
 
-                if (player.markedNumbers.length >= player.card.flat().filter(n => n !== null).length) {
+                let card = player.cards[cardIndex];
+                let cardNumbers = card.flat().filter(n => n !== null);
+                let markedOnThisCard = cardNumbers.every(n => player.markedNumbers.includes(n));
+
+                if (markedOnThisCard) {
                     clearInterval(globalRoom.interval);
                     globalRoom.gameStarted = false;
 
@@ -172,4 +189,3 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server işləyir: http://localhost:${PORT}`);
 });
-          
