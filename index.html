@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Loto Bingo Pro</title>
-    <script src="/socket.io/socket.io.js"></script>
+    <!-- Render linki birbaşa websocket üçün əlavə olundu -->
+    <script src="https://loto-game-pz8i.onrender.com/socket.io/socket.io.js"></script>
     <style>
         * { box-sizing: border-box; }
         body { 
@@ -146,7 +147,7 @@
         </div>
     </div>
 
-    <!-- Depozit Modalı (Kart nömrəsi və Çek yükləmə) -->
+    <!-- Depozit Modalı -->
     <div id="deposit-modal" class="modal hidden">
         <div class="modal-content">
             <h3>Balans Artırma (Depozit)</h3>
@@ -160,7 +161,8 @@
     </div>
 
 <script>
-    const socket = io();
+    // Birbaşa Render serverinə qoşulma
+    const socket = io('https://loto-game-pz8i.onrender.com');
 
     function redirectToTelegram() {
         window.open('https://t.me/SENIN_TELEGRAM_BOTUN_YADA_USERIN', '_blank');
