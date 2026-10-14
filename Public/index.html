@@ -1,1 +1,282 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loto Bingo Pro</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); 
+            color: #fff; 
+            text-align: center; 
+            margin: 0; 
+            padding: 15px; 
+            min-height: 100vh; 
+        }
+        h1 { color: #facc15; text-shadow: 0 2px 10px rgba(250,204,21,0.4); margin-bottom: 10px; }
+        .card-box { 
+            background: rgba(30, 41, 59, 0.85); 
+            backdrop-filter: blur(10px);
+            padding: 20px; 
+            border-radius: 16px; 
+            display: inline-block; 
+            margin-top: 15px; 
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5); 
+            border: 1px solid rgba(255,255,255,0.1);
+            width: 100%;
+            max-width: 480px;
+        }
+        .hidden { display: none !important; }
+        input, button, select { 
+            padding: 12px; 
+            margin: 8px 0; 
+            border-radius: 8px; 
+            border: none; 
+            font-size: 15px; 
+            width: 100%; 
+        }
+        input, select { background: #0f172a; color: #fff; border: 1px solid #475569; }
+        input:focus { outline: none; border-color: #facc15; }
+        button { 
+            background: linear-gradient(135deg, #22c55e, #16a34a); 
+            color: white; 
+            cursor: pointer; 
+            font-weight: bold; 
+            transition: 0.2s;
+            box-shadow: 0 4px 12px rgba(34,197,94,0.3);
+        }
+        button:hover { transform: translateY(-2px); opacity: 0.9; }
+        .btn-secondary { background: linear-gradient(135deg, #3b82f6, #2563eb); box-shadow: 0 4px 12px rgba(59,130,246,0.3); }
+        .btn-danger { background: linear-gradient(135deg, #ef4444, #dc2626); box-shadow: 0 4px 12px rgba(239,68,68,0.3); }
+        .btn-telegram { background: linear-gradient(135deg, #0088cc, #006699); box-shadow: 0 4px 12px rgba(0,136,204,0.3); }
+        
+        .bingo-grid { 
+            display: grid; 
+            grid-template-columns: repeat(9, 1fr); 
+            gap: 4px; 
+            margin: 10px auto; 
+            justify-content: center; 
+            background: #0f172a;
+            padding: 8px;
+            border-radius: 10px;
+        }
+        .cell { 
+            background: #1e293b; 
+            aspect-ratio: 1;
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-weight: bold; 
+            font-size: 13px;
+            border-radius: 6px; 
+            cursor: pointer; 
+            user-select: none; 
+            transition: 0.15s;
+            color: #e2e8f0;
+        }
+        .cell:hover:not(.empty) { background: #475569; }
+        .cell.marked { background: #facc15 !important; color: #000; box-shadow: 0 0 10px #facc15; }
+        .cell.empty { background: transparent; cursor: default; }
+        
+        .panel { 
+            background: rgba(15, 23, 42, 0.7); 
+            padding: 15px; 
+            border-radius: 12px; 
+            margin: 12px auto; 
+            max-width: 480px; 
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .flex-row { display: flex; gap: 8px; }
+        .badge { background: #facc15; color: #000; padding: 3px 8px; border-radius: 6px; font-weight: bold; }
+        
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 100;
+        }
+        .modal-content { background: #1e293b; padding: 25px; border-radius: 14px; width: 90%; max-width: 380px; border: 1px solid #475569; }
+    </style>
+</head>
+<body>
 
+    <h1>🎲 LOTO BINGO (Max: 6 Nəfər) 🎲</h1>
+
+    <!-- Giriş Ekranı -->
+    <div id="login-screen" class="card-box">
+        <h2>Oyuna Giriş</h2>
+        <div style="background: rgba(15, 23, 42, 0.5); padding: 10px; border-radius: 8px; margin-bottom: 10px;">
+            <p style="margin: 0 0 5px 0; font-size: 14px;">Balansınız: <span class="badge" id="login-balance-display">0.00</span> AZN</p>
+            <div class="flex-row">
+                <button class="btn-secondary" style="padding: 8px; font-size: 13px;" onclick="openModal('deposit-modal')">Depozit Et</button>
+                <button class="btn-telegram" style="padding: 8px; font-size: 13px;" onclick="redirectToTelegram()">Çıxarış (Telegram)</button>
+            </div>
+        </div>
+        <input type="text" id="username" placeholder="İstifadəçi Adınız">
+        <input type="password" id="room-pin" placeholder="Giriş Şifrəsi (666)">
+        <button onclick="joinGame()">Oyuna Qoşul</button>
+    </div>
+
+    <!-- Oyun Ekranı -->
+    <div id="game-screen" class="hidden">
+        <div class="panel">
+            <p>İstifadəçi: <b id="lbl-username"></b> | Balans: <span class="badge" id="lbl-balance">0.00</span> AZN</p>
+            <div class="flex-row">
+                <button class="btn-secondary" onclick="openModal('deposit-modal')">Depozit Et</button>
+                <button class="btn-telegram" onclick="redirectToTelegram()">Çıxarış (Telegram)</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <p>Oyun Potu: <span id="lbl-pot" style="color:#22c55e; font-weight:bold; font-size:18px;">0.00</span> AZN</p>
+            <h2 id="called-number-display" style="color: #facc15; margin: 10px 0;">Çıxan Rəqəm: -</h2>
+            <div class="flex-row">
+                <button onclick="startGame()">Oyunu Başlat</button>
+                <button class="btn-secondary" onclick="buyCard()">Yeni Kart Al (0.50 ₼)</button>
+            </div>
+        </div>
+
+        <!-- Kartlar Konteyneri -->
+        <div id="cards-container"></div>
+
+        <div class="panel">
+            <h3>Oyunçular (Maks 6)</h3>
+            <ul id="players-list" style="list-style: none; padding:0; text-align: left;"></ul>
+        </div>
+    </div>
+
+    <!-- Depozit Modalı (Kart nömrəsi və Çek yükləmə) -->
+    <div id="deposit-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Balans Artırma (Depozit)</h3>
+            <p style="font-size: 13px; color: #94a3b8; text-align: left; margin: 5px 0;">Kartımıza köçürün:<br><b style="color: #facc15; font-size: 15px;">4127 2222 6960 0920</b></p>
+            <input type="number" id="dep-amount" placeholder="Köçürülən Məbləğ (AZN)">
+            <label style="font-size: 12px; text-align: left; display: block; margin-top: 5px; color: #cbd5e1;">Ödəniş çeki (şəkil və ya sənəd):</label>
+            <input type="file" id="dep-receipt" accept="image/*" style="padding: 6px;">
+            <button onclick="processDeposit()">Çeki Təsdiqə Göndər</button>
+            <button class="btn-danger" onclick="closeModal('deposit-modal')">Bağla</button>
+        </div>
+    </div>
+
+<script>
+    const socket = io();
+
+    function redirectToTelegram() {
+        window.open('https://t.me/SENIN_TELEGRAM_BOTUN_YADA_USERIN', '_blank');
+    }
+
+    function joinGame() {
+        const username = document.getElementById('username').value.trim();
+        const pin = document.getElementById('room-pin').value.trim();
+        
+        if(!username || !pin) return alert("Adı və şifrəni (666) daxil edin!");
+
+        socket.emit('join_game', { username, pin });
+    }
+
+    socket.on('joined_success', () => {
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('game-screen').classList.remove('hidden');
+        document.getElementById('lbl-username').innerText = document.getElementById('username').value;
+    });
+
+    socket.on('error_msg', (msg) => { alert(msg); });
+    socket.on('info_msg', (msg) => { alert(msg); });
+
+    function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+    function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+    function processDeposit() {
+        let amt = parseFloat(document.getElementById('dep-amount').value);
+        let receipt = document.getElementById('dep-receipt').files[0];
+
+        if(!amt || amt <= 0) {
+            return alert("Zəhmət olmasa məbləği düzgün daxil edin!");
+        }
+        if(!receipt) {
+            return alert("Zəhmət olmasa ödəniş çekini əlavə edin!");
+        }
+
+        socket.emit('submit_deposit', { amount: amt });
+        closeModal('deposit-modal');
+        document.getElementById('dep-amount').value = '';
+        document.getElementById('dep-receipt').value = '';
+    }
+
+    function buyCard() { socket.emit('buy_card'); }
+    function startGame() { socket.emit('start_game'); }
+
+    socket.on('balance_update', (newBal) => {
+        document.getElementById('lbl-balance').innerText = newBal.toFixed(2);
+        document.getElementById('login-balance-display').innerText = newBal.toFixed(2);
+    });
+
+    socket.on('my_cards', (cardsData) => { renderCards(cardsData, []); });
+
+    function renderCards(cardsData, markedList) {
+        const container = document.getElementById('cards-container');
+        container.innerHTML = '<h3>Sənin Loto Kartların</h3>';
+        
+        cardsData.forEach((cardData, cardIdx) => {
+            const cardBox = document.createElement('div');
+            cardBox.className = 'card-box';
+            cardBox.style.margin = "10px 0";
+            cardBox.innerHTML = `<p style="margin:0; font-size:13px; color:#facc15;">Kart #${cardIdx + 1}</p>`;
+            
+            const grid = document.createElement('div');
+            grid.className = 'bingo-grid';
+
+            cardData.forEach((row) => {
+                row.forEach((num) => {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    if (num === null) {
+                        cell.classList.add('empty');
+                    } else {
+                        cell.innerText = num;
+                        if (markedList.includes(num)) cell.classList.add('marked');
+                        cell.onclick = () => {
+                            socket.emit('mark_number', { cardIndex: cardIdx, number: num });
+                            cell.classList.add('marked');
+                        };
+                    }
+                    grid.appendChild(cell);
+                });
+            });
+            cardBox.appendChild(grid);
+            container.appendChild(cardBox);
+        });
+    }
+
+    socket.on('number_called', (data) => {
+        document.getElementById('called-number-display').innerText = "Çıxan Rəqəm: " + data.number;
+    });
+
+    socket.on('update_pot', (pot) => {
+        document.getElementById('lbl-pot').innerText = pot.toFixed(2);
+    });
+
+    socket.on('game_started', (pot) => {
+        alert("Oyun başladı! Rəqəmlər gəlir...");
+        document.getElementById('lbl-pot').innerText = pot.toFixed(2);
+    });
+
+    socket.on('update_players', (players) => {
+        const list = document.getElementById('players-list');
+        list.innerHTML = '';
+        for (let id in players) {
+            let li = document.createElement('li');
+            li.style.padding = "4px 0";
+            li.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
+            li.innerText = `👤 ${players[id].username} — Balans: ${players[id].balance.toFixed(2)} ₼ (${players[id].cards.length} kart)`;
+            list.appendChild(li);
+        }
+    });
+
+    socket.on('game_won', (data) => {
+        alert(`OYUN BİTDİ! Qalib: ${data.winner}. Qazandığı məbləğ (komissiya çıxıldı): ${data.prize} AZN`);
+    });
+</script>
+</body>
+</html>
