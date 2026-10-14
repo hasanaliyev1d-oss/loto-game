@@ -7,7 +7,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static(path.join(__dirname, 'public')));
+// index.html faylı birbaşa digər fayllarla eyni yerdə olacaq
+app.use(express.static(__dirname));
 
 let globalRoom = {
     players: {},
@@ -137,7 +138,7 @@ io.on('connection', (socket) => {
                     if (prize < 0) prize = 0;
 
                     player.balance += prize;
-                    io.emit('game_won', { winner: player.username, prize: prize.toFixed(2) });
+                    io.emit('game_won', { winner: player.username, prize: prize.toFixed(2) };
                     io.emit('update_players', globalRoom.players);
                     socket.emit('balance_update', player.balance);
                     
@@ -184,4 +185,3 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server işləyir: http://localhost:${PORT}`);
 });
-                    
