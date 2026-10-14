@@ -26,7 +26,6 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // Maksimum 6 nəfər limiti yoxlanışı
         let currentPlayersCount = Object.keys(globalRoom.players).length;
         if (currentPlayersCount >= 6 && !globalRoom.players[socket.id]) {
             socket.emit('error_msg', 'Otaq doludur! Maksimum 6 nəfər qoşula bilər.');
@@ -36,8 +35,8 @@ io.on('connection', (socket) => {
         if (!globalRoom.players[socket.id]) {
             globalRoom.players[socket.id] = {
                 username: username,
-                balance: 0.00, // Sıfır balans
-                cards: [], // Birdən çox kart ala bilmə dəstəyi
+                balance: 0.00,
+                cards: [],
                 markedNumbers: []
             };
         }
@@ -48,16 +47,13 @@ io.on('connection', (socket) => {
         socket.emit('update_pot', globalRoom.pot);
     });
 
-    // Depozit çeki təsdiqi (Admin və ya simulyasiya edilmiş təsdiq)
     socket.on('submit_deposit', ({ amount }) => {
         let player = globalRoom.players[socket.id];
         if (player) {
             let depAmount = parseFloat(amount) || 0;
             if (depAmount > 0) {
-                // Çek göndərildi, təsdiq gözlənilir mesajı
                 socket.emit('info_msg', 'Çekiniz qəbul olundu. Yoxlanılır...');
                 
-                // Real sistemdə admin təsdiq edir, burada avtomatik yoxlama simulyasiyası:
                 setTimeout(() => {
                     player.balance += depAmount;
                     io.emit('update_players', globalRoom.players);
@@ -68,7 +64,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 0.50 AZN-ə kart almaq (Bir oyunçu istədiyi qədər kart ala bilər)
     socket.on('buy_card', () => {
         let player = globalRoom.players[socket.id];
         
@@ -189,3 +184,4 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server işləyir: http://localhost:${PORT}`);
 });
+                    
